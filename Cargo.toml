@@ -1,0 +1,5 @@
+# The engine crate on its own, for its tests: `cargo test`. The Horizon launcher builds the
+# bundle (mixins/simplevoicechat/) into the game, with the engine as a crate of Horizon's workspace.
+[workspace]
+members = ["mixins/simplevoicechat/engine"]
+resolver = "2"

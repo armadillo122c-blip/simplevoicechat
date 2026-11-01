@@ -1,0 +1,11 @@
+[package]
+name = "simplevoicechat-engine"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Simple Voice Chat for Horizon: capture, codec, 3D mixing and the server's routing."
+
+# Only crates in Horizon's Cargo.lock, by version requirement (docs/native-mods.md).
+[dependencies]
+cpal = "0.16"
