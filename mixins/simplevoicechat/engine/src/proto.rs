@@ -7,11 +7,14 @@ pub const HELLO: &str = "simplevoicechat:hello";
 pub const MIC: &str = "simplevoicechat:mic";
 /// Server to client: frames of a voice this player hears.
 pub const SOUND: &str = "simplevoicechat:sound";
-/// Server to client: the players with voice chat, and this player's group.
+/// Server to client: the players with voice chat, this player's group and the groups.
 pub const STATE: &str = "simplevoicechat:state";
+/// Client to server: a group action from the menu (`join <group> [password]`, `leave`,
+/// `isolate`), answered in chat as the command is.
+pub const CMD: &str = "simplevoicechat:cmd";
 
 /// Bumped when a message changes shape; halves of other versions ignore each other.
-pub const PROTOCOL: u8 = 1;
+pub const PROTOCOL: u8 = 2;
 /// Frames a message carries at most (a tick holds 2 or 3).
 pub const MAX_FRAMES: usize = 10;
 
@@ -60,6 +63,35 @@ pub struct State {
     /// The server's voice distance, in blocks.
     pub distance: f32,
     pub peers: Vec<Peer>,
+    /// Every group on the server.
+    pub groups: Vec<GroupInfo>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupInfo {
+    pub name: String,
+    pub members: u8,
+    pub password: bool,
+    pub isolated: bool,
+}
+
+/// A group action from the menu.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cmd {
+    pub line: String,
+}
+
+impl Cmd {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut w = W::default();
+        w.u8(PROTOCOL).str(&self.line);
+        w.0
+    }
+    pub fn decode(data: &[u8]) -> Option<Self> {
+        let mut r = header(data)?;
+        let line = r.str()?;
+        r.end(Self { line })
+    }
 }
 
 #[derive(Default)]
@@ -240,6 +272,12 @@ impl State {
                 .str(&p.name)
                 .u8(u8::from(p.disabled) | u8::from(p.grouped) << 1);
         }
+        w.u8(self.groups.len().min(255) as u8);
+        for g in self.groups.iter().take(255) {
+            w.str(&g.name)
+                .u8(g.members)
+                .u8(u8::from(g.password) | u8::from(g.isolated) << 1);
+        }
         w.0
     }
     pub fn decode(data: &[u8]) -> Option<Self> {
@@ -264,11 +302,26 @@ impl State {
                 })
             })
             .collect::<Option<Vec<_>>>()?;
+        let n = r.u8()?;
+        let groups = (0..n)
+            .map(|_| {
+                let name = r.str()?;
+                let members = r.u8()?;
+                let flags = r.u8()?;
+                Some(GroupInfo {
+                    name,
+                    members,
+                    password: flags & 1 != 0,
+                    isolated: flags & 2 != 0,
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
         r.end(Self {
             group,
             isolated,
             distance,
             peers,
+            groups,
         })
     }
 }
@@ -321,8 +374,18 @@ mod tests {
                     grouped: false,
                 },
             ],
+            groups: vec![GroupInfo {
+                name: "miners".into(),
+                members: 2,
+                password: true,
+                isolated: true,
+            }],
         };
         assert_eq!(State::decode(&state.encode()), Some(state));
+        let cmd = Cmd {
+            line: "join miners hunter2".into(),
+        };
+        assert_eq!(Cmd::decode(&cmd.encode()), Some(cmd));
     }
 
     #[test]

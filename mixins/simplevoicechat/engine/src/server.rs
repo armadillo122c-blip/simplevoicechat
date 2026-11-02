@@ -5,7 +5,7 @@
 //! the voice distance (half of it while whispering), and every member of the speaker's group
 //! wherever they are. An isolated group's members hear only each other, and nobody outside
 //! hears them.
-use crate::proto::{self, Hello, Mic, Peer, Sound, SoundKind, State};
+use crate::proto::{self, Cmd, GroupInfo, Hello, Mic, Peer, Sound, SoundKind, State};
 use std::collections::HashMap;
 
 /// A player online, as the server tick sees them.
@@ -60,6 +60,8 @@ pub struct VoiceServer {
     players: Vec<Player>,
     groups: Vec<Group>,
     out: Vec<(u128, &'static str, Vec<u8>)>,
+    /// Chat lines for players: the answers to the menu's group actions.
+    tells: Vec<(u128, String)>,
     dirty: bool,
     ticks: u64,
 }
@@ -110,13 +112,38 @@ impl VoiceServer {
                     self.route(from, mic);
                 }
             }
+            proto::CMD => {
+                // Only the menu's group actions: the rest of /voicechat is for chat.
+                let Some(cmd) = Cmd::decode(data) else {
+                    return;
+                };
+                let first = cmd.line.split_whitespace().next();
+                if !self.clients.contains_key(&from)
+                    || !matches!(first, Some("join" | "leave" | "isolate"))
+                {
+                    return;
+                }
+                let (reply, others) = self.command(from, &format!("voicechat {}", cmd.line));
+                self.tells.extend(reply.into_iter().map(|l| (from, l)));
+                self.tells.extend(others);
+            }
             _ => {}
         }
     }
 
     /// What to send: (player, channel, data).
     pub fn drain(&mut self) -> Vec<(u128, &'static str, Vec<u8>)> {
+        // A group action changes the lists: send them at once, not at the next tick.
+        if self.dirty {
+            self.dirty = false;
+            self.send_states();
+        }
         std::mem::take(&mut self.out)
+    }
+
+    /// Chat lines to send: (player, line).
+    pub fn drain_tells(&mut self) -> Vec<(u128, String)> {
+        std::mem::take(&mut self.tells)
     }
 
     fn group_of(&self, uuid: u128) -> Option<usize> {
@@ -176,6 +203,16 @@ impl VoiceServer {
     }
 
     fn send_states(&mut self) {
+        let groups: Vec<GroupInfo> = self
+            .groups
+            .iter()
+            .map(|g| GroupInfo {
+                name: g.name.clone(),
+                members: g.members.len().min(255) as u8,
+                password: g.password.is_some(),
+                isolated: g.isolated,
+            })
+            .collect();
         let mut out = Vec::new();
         for (&uuid, _) in &self.clients {
             let group = self.group_of(uuid);
@@ -198,6 +235,7 @@ impl VoiceServer {
                 isolated: group.is_some_and(|g| self.groups[g].isolated),
                 distance: self.config.distance,
                 peers,
+                groups: groups.clone(),
             };
             out.push((uuid, proto::STATE, state.encode()));
         }
@@ -459,6 +497,32 @@ mod tests {
         s.tick(vec![player(3, "Far", "minecraft:overworld", 100.0)]);
         assert_eq!(s.command(3, "voicechat groups").0.len(), 1);
         assert!(s.groups.is_empty());
+    }
+
+    #[test]
+    fn the_menu_joins_and_leaves_groups_and_hears_why() {
+        let mut s = world();
+        let cmd = |line: &str| Cmd { line: line.into() }.encode();
+        s.message(1, proto::CMD, &cmd("join team pw"));
+        assert_eq!(s.drain_tells(), [(1, "You made the voice group team with a password. Others join with /voicechat join team.".to_owned())]);
+        // The lists go out at once, with the group in them.
+        let states: Vec<State> = s
+            .drain()
+            .into_iter()
+            .filter(|m| m.1 == proto::STATE)
+            .map(|(_, _, d)| State::decode(&d).unwrap())
+            .collect();
+        assert_eq!(states.len(), 4);
+        assert!(states.iter().all(|st| st.groups.len() == 1 && st.groups[0].password));
+        s.message(2, proto::CMD, &cmd("join team"));
+        assert_eq!(s.drain_tells(), [(2, "Wrong password for team.".to_owned())]);
+        s.message(2, proto::CMD, &cmd("join team pw"));
+        assert_eq!(s.group_of(2), s.group_of(1));
+        // Only group actions: the menu can't invite or list.
+        s.message(2, proto::CMD, &cmd("invite Far"));
+        assert!(s.drain_tells().iter().all(|t| t.0 != 3));
+        s.message(2, proto::CMD, &cmd("leave"));
+        assert_eq!(s.group_of(2), None);
     }
 
     #[test]

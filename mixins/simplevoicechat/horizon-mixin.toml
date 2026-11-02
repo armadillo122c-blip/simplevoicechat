@@ -1,6 +1,6 @@
 [mod]
 id = "simplevoicechat"
-version = "0.1.0"
+version = "0.2.0"
 priority = 100
 
 # The commit it was tested on (Nightly 2026-11-01). It uses only the native hook points
@@ -92,6 +92,56 @@ bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
   { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
   { name = "corners", ty = "&mut horizon_client::extras_hud::Corners", value = "&mut *corners" },
+]
+
+# --- The voice chat menu (V): a screen of the mod's own over the world ----------------------
+
+[[injection]]
+id = "menu_draw"
+hook = "screen_render_post"
+hook_version = 1
+kind = "HEAD"
+helper = "menu_draw.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+]
+
+[[injection]]
+id = "menu_click"
+hook = "screen_mouse_button_pressed_pre"
+hook_version = 1
+kind = "HEAD"
+helper = "menu_click.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+  { name = "screen", ty = "&crate::game::native_hooks::NativeScreenView<'_>", value = "screen" },
+  { name = "button", ty = "i32", value = "button" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+# Not in the named catalog of this nightly yet: by their place in the source.
+[[injection]]
+id = "menu_key"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_screen_key_pressed_pre"
+helper = "menu_key.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
+]
+
+[[injection]]
+id = "menu_char"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_screen_char_typed_pre"
+helper = "menu_char.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+  { name = "c", ty = "char", value = "c" },
+  { name = "canceled", ty = "&mut bool", value = "&mut *canceled" },
 ]
 
 # --- The server half -------------------------------------------------------------------------

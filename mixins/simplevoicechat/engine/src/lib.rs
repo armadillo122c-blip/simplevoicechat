@@ -14,6 +14,7 @@ pub mod audio;
 pub mod client;
 pub mod codec;
 pub mod dsp;
+pub mod menu;
 pub mod proto;
 pub mod server;
 pub mod spatial;
@@ -22,7 +23,7 @@ use std::cell::RefCell;
 
 /// The mod's id: its settings folder, its keys' lines and its channels' namespace.
 pub const ID: &str = "simplevoicechat";
-pub const VERSION: &str = "0.1.0";
+pub const VERSION: &str = "0.2.0";
 pub const TITLE: &str = "Simple Voice Chat";
 pub const DESCRIPTION: &str = "Proximity voice chat: talk to the players near you, or to your group anywhere. \
      Push to talk or voice activation. A Horizon port of henkelmax's Simple Voice Chat.";
