@@ -89,6 +89,22 @@ Messages: `hello` (client has the mod, on or off), `mic` (a tick's frames), `sou
 forwarded with the speaker's position or as group voice) and `state` (players with voice, your
 group).
 
+## Tested
+
+Built by the launcher on Nightly 2026-11-01 (release profile) and played on Windows with two
+accounts on one PC: Armadillo122 hosting a world opened to LAN, AngryChud joining. Each check was
+read from both players' HUDs:
+
+- Push to talk goes both ways: the speaker's HUD shows "talking" and the listener's shows them
+  speaking.
+- 30 blocks: heard. 100 blocks: not heard. Whisper: heard at 10 blocks, not at 30.
+- A group (`/voicechat join team`) hears each other 100 blocks apart and from the Nether.
+  `/voicechat leave` puts you back on proximity.
+- The settings page and key rebinding work (push to talk moved to V).
+
+Not checked: how the voice actually sounds through speakers. The test read the HUDs, not the
+audio output.
+
 ## Develop
 
 ```sh
